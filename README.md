@@ -7,6 +7,15 @@ EDCTP-Ghana SARS-CoV2-Sequencing Project
 
 
 
+## Install Conveyor LIMS System
+
+
+
+## Configure Conveyor LIMS System
+
+
+
+
 ## Configure MinKNOW For GPU Basecalling
 
 https://community.nanoporetech.com/posts/enabling-gpu-basecalling-f
