@@ -14,7 +14,9 @@ EDCTP-Ghana SARS-CoV2-Sequencing Project
 ## Configure Conveyor LIMS System
 
 
+## Install MinKNOW 20.06.4
 
+https://community.nanoporetech.com/protocols/experiment-companion-minknow/v/mke_1013_v1_revbf_11apr2016/installing-minknow-on-linu
 
 ## Configure MinKNOW For GPU Basecalling
 
