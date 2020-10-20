@@ -1,0 +1,158 @@
+import os.path
+from os import path
+
+configfile: "config.yaml"
+sample_file = config["sample_file"]
+import csv
+
+samples={}
+with open("samples.tsv") as fd:
+    rd = csv.reader(fd, delimiter="\t", quotechar='"')
+    for row in rd:
+        if row[0] != "sample":
+            samples[row[0]]=row[1]
+
+
+## what if a sample fails, we need to control for no reads - here we delete it from the dictionary
+
+for sample in samples.keys():
+    to_delete=[]
+    barcode = samples[sample]
+    barcode_path = config["demux_folder"]+"/"+barcode
+    print(barcode_path)
+    if not path.exists(barcode_path):
+        to_delete.append(sample)
+if len(to_delete) > 0:
+    for sample in to_delete:
+        samples.pop(sample,None)
+
+
+rule all:
+    input:
+        expand("{run_name}_{barcode}.fastq",run_name=config["run_name"],barcode=samples.values()),
+        expand("{sample}.consensus.fasta",sample=samples),
+        expand("{run_name}-consensus.gisaid.fasta",run_name=config["run_name"]),
+        "lineage_report.csv",
+        expand("{sample}.primertrimmed.rg.sorted.bam.depth_region",sample=samples),
+        expand("{sample}.consensus.gisaid.fasta",sample=samples),
+        expand("{sample}.consensus.gisaid.fasta.non_n_count",sample=samples),
+        #"pipeline.done"
+
+rule guppylex:
+    input:
+    output:
+        "{run_name}_{barcode}.fastq"
+    params:
+        run_name=config["run_name"],
+        demux_folder=config["demux_folder"]
+    conda:
+        "envs/environment_artic.yml"
+    shell:
+        "artic guppyplex --min-length 400 --skip-quality-check --max-length 700 --directory {params.demux_folder}/{wildcards.barcode} --prefix {params.run_name}"
+
+rule artic:
+    input:
+        fastq = lambda wildcards: config["run_name"]+"_"+samples[wildcards.sample]+".fastq"
+    output:
+        "{sample}.consensus.fasta",
+        "{sample}.primertrimmed.rg.sorted.bam",
+        "{sample}.sorted.bam"
+    params:
+        summary = config["sequencing_summary"],
+        scheme_dir = config["scheme_dir"],
+        fast5_dir = lambda wildcards: config["fast5_dir"]+"/"+samples[wildcards.sample],
+        primers = config["primers"]
+    conda:
+        "envs/environment_artic.yml"
+    shell:
+        "artic minion --normalise 200 --threads 4 --scheme-directory {params.scheme_dir} --read-file {input.fastq} --fast5-directory {params.fast5_dir}  --sequencing-summary {params.summary} nCoV-2019/{params.primers} {wildcards.sample} || touch {wildcards.sample}.consensus.fasta {wildcards.sample}.primertrimmed.rg.sorted.bam {wildcards.sample}.sorted.bam"
+
+rule sambamba:
+    input:
+        "{sample}.primertrimmed.rg.sorted.bam"
+    output:
+        "{sample}.primertrimmed.rg.sorted.bam.depth_region"
+    params:
+        bed = config["code_path"]+"/resources/amplicon_regions_"+config["primers"]+".bed",
+        sambamba = config["sambamba"]
+    shell:
+       "sambamba depth region -F 'mapping_quality > 0' -o {output} -L {params.bed} {input} || touch {wildcards.sample}.primertrimmed.rg.sorted.bam.depth_region"
+
+rule dissemination:
+    input:
+        bam = "{sample}.sorted.bam",
+        fasta = "{sample}.consensus.fasta"
+    output:
+        "{sample}.sorted.mapped.bam",
+        "{sample}.consensus.gisaid.fasta"
+    params:
+        dissemination = expand("{code_path}/bin/dissemination.sh",code_path=config["code_path"]),
+    shell:
+        "bash {params.dissemination} {wildcards.sample} {input.bam} {input.fasta}"
+
+rule get_non_n_count:
+    input:
+        fasta = "{sample}.consensus.gisaid.fasta"
+    output:
+        "{sample}.consensus.gisaid.fasta.non_n_count"
+    shell:
+        "grep -v '>' {input.fasta} | tr -d 'N' | tr -d '\n' | perl -pe 's/\s+//g' | wc -m > {output} || touch {sample}.consensus.fasta.non_n_count"
+
+rule merge_fasta:
+    input:
+        fasta = expand("{sample}.consensus.gisaid.fasta", sample=samples.keys()),
+        non_n_count = expand("{sample}.consensus.gisaid.fasta.non_n_count", sample=samples.keys())
+    output:
+         expand("{run_name}-consensus.gisaid.fasta",run_name=config["run_name"])
+    params:
+        run_name=config["run_name"]
+    shell:
+        """
+        for fasta in {input.fasta}
+          do non_n_count=`cat $fasta.non_n_count`
+          if [ $non_n_count -ge 14935 ]
+            then cat $fasta >> {params.run_name}-consensus.gisaid.fasta
+          else
+            # Ensure output file exists even if this condition is never met
+            touch {params.run_name}-consensus.gisaid.fasta
+          fi;
+        done
+        """
+
+rule pangolin:
+    input:
+        fasta= expand("{run_name}-consensus.gisaid.fasta",run_name=config["run_name"])
+    output:
+        "lineage_report.csv"
+    conda:
+        "envs/environment_pangolin.yml"
+    shell:
+        "pangolin {input.fasta}"
+
+#Will need its own python environment
+#rule post_process:
+#    input:
+#        lineage_report = "lineage_report.csv"
+#    output:
+#        "pipeline.done"
+#    params:
+#        post_process = expand("{code_path}/bin/post_process.py",code_path=config["code_path"]),
+#        run_name = config['run_name'],
+#        slack_channel = config['slack_channel'],
+#        pipeline = config['artic_version']
+#    conda:
+#        "envs/environment_post.yml"
+#    shell:
+#        "python {params.post_process} --run_name {params.run_name} --pipeline {params.pipeline} --channel_name {params.slack_channel} --lineage_report {input.lineage_report} && touch {output}"
+
+#rule run_report:
+#  input:
+#    expand("{sample}.primertrimmed.rg.sorted.bam.depth_region",sample=samples)
+#  output:
+#    expand("{run_name}_run_report.html",run_name=config["run_name"])
+#  params:
+#    config = "config.yaml",
+#    code_path = config['code_path'],
+#    working_dir = cwd
+#  shell:
+#    """R --slave -e 'rmarkdown::render("{params.code_path}/bin/run_report.Rmd", "html_document",knit_root_dir="{params.working_dir}",output_dir="{params.working_dir}",params=list(config_file="{params.config}"))'"""
