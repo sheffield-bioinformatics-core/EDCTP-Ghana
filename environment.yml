@@ -1,4 +1,4 @@
-name: periscope
+name: sarscov2
 channels:
   - conda-forge
   - bioconda

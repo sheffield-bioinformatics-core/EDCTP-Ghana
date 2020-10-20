@@ -1,16 +1,29 @@
 import os.path
 from os import path
-
-configfile: "config.yaml"
-sample_file = config["sample_file"]
+import glob
 import csv
 
 samples={}
-with open("samples.tsv") as fd:
-    rd = csv.reader(fd, delimiter="\t", quotechar='"')
+with open("samples.csv") as fd:
+    rd = csv.reader(fd, delimiter=",", quotechar='"')
     for row in rd:
-        if row[0] != "sample":
-            samples[row[0]]=row[1]
+        if len(row)>0:
+            if row[0] != "sample":
+                samples[row[0]]=row[1]
+
+
+
+## find run folder
+run_folder = glob.glob("/data/"+config["user_run_name"]+"/*/*")[0]
+run_name = os.path.basename(run_folder)
+## find sequencing summary
+sequencing_summary = glob.glob(run_folder+"/sequencing_summary*.txt")[0]
+
+## hardcode some stuff
+code_path = '/home/sarscov2/wc/EDCTP-Ghana/workflow'
+scheme_dir = '/home/sarscov2/artic-ncov2019/primer_schemes'
+artic_version = 'v1.1.3'
+primers= 'V3'
 
 
 ## what if a sample fails, we need to control for no reads - here we delete it from the dictionary
@@ -18,7 +31,7 @@ with open("samples.tsv") as fd:
 for sample in samples.keys():
     to_delete=[]
     barcode = samples[sample]
-    barcode_path = config["demux_folder"]+"/"+barcode
+    barcode_path = run_folder+"/fastq_pass/"+barcode
     print(barcode_path)
     if not path.exists(barcode_path):
         to_delete.append(sample)
@@ -29,9 +42,9 @@ if len(to_delete) > 0:
 
 rule all:
     input:
-        expand("{run_name}_{barcode}.fastq",run_name=config["run_name"],barcode=samples.values()),
+        expand("{run_name}_{barcode}.fastq",run_name=run_name,barcode=samples.values()),
         expand("{sample}.consensus.fasta",sample=samples),
-        expand("{run_name}-consensus.gisaid.fasta",run_name=config["run_name"]),
+        expand("{run_name}-consensus.gisaid.fasta",run_name=run_name),
         "lineage_report.csv",
         expand("{sample}.primertrimmed.rg.sorted.bam.depth_region",sample=samples),
         expand("{sample}.consensus.gisaid.fasta",sample=samples),
@@ -43,25 +56,25 @@ rule guppylex:
     output:
         "{run_name}_{barcode}.fastq"
     params:
-        run_name=config["run_name"],
-        demux_folder=config["demux_folder"]
+        run_name=run_name,
+        fastq_pass=run_folder+"/fastq_pass"
     conda:
         "envs/environment_artic.yml"
     shell:
-        "artic guppyplex --min-length 400 --skip-quality-check --max-length 700 --directory {params.demux_folder}/{wildcards.barcode} --prefix {params.run_name}"
+        "artic guppyplex --min-length 400 --skip-quality-check --max-length 700 --directory {params.fastq_pass}/{wildcards.barcode} --prefix {params.run_name}"
 
 rule artic:
     input:
-        fastq = lambda wildcards: config["run_name"]+"_"+samples[wildcards.sample]+".fastq"
+        fastq = lambda wildcards: run_name+"_"+samples[wildcards.sample]+".fastq"
     output:
         "{sample}.consensus.fasta",
         "{sample}.primertrimmed.rg.sorted.bam",
         "{sample}.sorted.bam"
     params:
-        summary = config["sequencing_summary"],
-        scheme_dir = config["scheme_dir"],
-        fast5_dir = lambda wildcards: config["fast5_dir"]+"/"+samples[wildcards.sample],
-        primers = config["primers"]
+        summary = sequencing_summary,
+        scheme_dir = scheme_dir,
+        fast5_dir = lambda wildcards: run_folder+"/fast5_pass/"+samples[wildcards.sample],
+        primers =primers
     conda:
         "envs/environment_artic.yml"
     shell:
@@ -73,8 +86,7 @@ rule sambamba:
     output:
         "{sample}.primertrimmed.rg.sorted.bam.depth_region"
     params:
-        bed = config["code_path"]+"/resources/amplicon_regions_"+config["primers"]+".bed",
-        sambamba = config["sambamba"]
+        bed = code_path+"/resources/amplicon_regions_"+primers+".bed",
     shell:
        "sambamba depth region -F 'mapping_quality > 0' -o {output} -L {params.bed} {input} || touch {wildcards.sample}.primertrimmed.rg.sorted.bam.depth_region"
 
@@ -86,7 +98,7 @@ rule dissemination:
         "{sample}.sorted.mapped.bam",
         "{sample}.consensus.gisaid.fasta"
     params:
-        dissemination = expand("{code_path}/bin/dissemination.sh",code_path=config["code_path"]),
+        dissemination = expand("{code_path}/bin/dissemination.sh",code_path=code_path),
     shell:
         "bash {params.dissemination} {wildcards.sample} {input.bam} {input.fasta}"
 
@@ -103,9 +115,9 @@ rule merge_fasta:
         fasta = expand("{sample}.consensus.gisaid.fasta", sample=samples.keys()),
         non_n_count = expand("{sample}.consensus.gisaid.fasta.non_n_count", sample=samples.keys())
     output:
-         expand("{run_name}-consensus.gisaid.fasta",run_name=config["run_name"])
+         expand("{run_name}-consensus.gisaid.fasta",run_name=run_name)
     params:
-        run_name=config["run_name"]
+        run_name=run_name
     shell:
         """
         for fasta in {input.fasta}
@@ -121,7 +133,7 @@ rule merge_fasta:
 
 rule pangolin:
     input:
-        fasta= expand("{run_name}-consensus.gisaid.fasta",run_name=config["run_name"])
+        fasta= expand("{run_name}-consensus.gisaid.fasta",run_name=run_name)
     output:
         "lineage_report.csv"
     conda:
