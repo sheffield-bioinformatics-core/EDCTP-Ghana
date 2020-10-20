@@ -1,4 +1,7 @@
-!/bin/bash
+#!/bin/bash
+
+# 1st list the available data directories
+
 let i=0 # define counting variable
 W=() # define working array
 while read -r line; do # process file by file
@@ -11,6 +14,8 @@ if [ $? -eq 0 ]; then # Exit with OK
     RUN_FOLDER=$(ls -1d /data/*/ | sed -n "`echo "$FILE p" | sed 's/ //'`")
     USER_RUN_NAME=`echo ${RUN_FOLDER} | cut -f3 -d"/"`
 fi
+
+# now data directory has been chosen show dialog to enter samples and barcodes
 
 BACKTITLE="Some backtitle"
 FILENAME="filename.txt"

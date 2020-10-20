@@ -49,6 +49,7 @@ rule all:
         expand("{sample}.primertrimmed.rg.sorted.bam.depth_region",sample=samples),
         expand("{sample}.consensus.gisaid.fasta",sample=samples),
         expand("{sample}.consensus.gisaid.fasta.non_n_count",sample=samples),
+        expand("{sample}.sorted.mapped.bam",sample=samples),
         #"pipeline.done"
 
 rule guppylex:
@@ -141,30 +142,12 @@ rule pangolin:
     shell:
         "pangolin {input.fasta}"
 
-#Will need its own python environment
-#rule post_process:
-#    input:
-#        lineage_report = "lineage_report.csv"
-#    output:
-#        "pipeline.done"
-#    params:
-#        post_process = expand("{code_path}/bin/post_process.py",code_path=config["code_path"]),
-#        run_name = config['run_name'],
-#        slack_channel = config['slack_channel'],
-#        pipeline = config['artic_version']
-#    conda:
-#        "envs/environment_post.yml"
-#    shell:
-#        "python {params.post_process} --run_name {params.run_name} --pipeline {params.pipeline} --channel_name {params.slack_channel} --lineage_report {input.lineage_report} && touch {output}"
-
-#rule run_report:
-#  input:
-#    expand("{sample}.primertrimmed.rg.sorted.bam.depth_region",sample=samples)
-#  output:
-#    expand("{run_name}_run_report.html",run_name=config["run_name"])
-#  params:
-#    config = "config.yaml",
-#    code_path = config['code_path'],
-#    working_dir = cwd
-#  shell:
-#    """R --slave -e 'rmarkdown::render("{params.code_path}/bin/run_report.Rmd", "html_document",knit_root_dir="{params.working_dir}",output_dir="{params.working_dir}",params=list(config_file="{params.config}"))'"""
+rule upload:
+    input:
+        fasta=expand("{sample}.consensus.fasta",sample=samples.keys()),
+        bam=expand("{sample}.sorted.mapped.bam",sample=samples.keys()),
+        png=expand("{sample}-barplot.png",sample=samples.keys())
+    params:
+        run_name=run_name
+    shell:
+         "rclone copy {input.bam} edctp-ghana:RESULTS/{params.run_name}/ && rclone copy {input.fasta} edctp-ghana:RESULTS/{params.run_name}/ &&  rclone copy {input.png} edctp-ghana:RESULTS/{params.run_name}/"
