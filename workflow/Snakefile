@@ -45,15 +45,50 @@ rule all:
         expand("{run_name}_{barcode}.fastq",run_name=run_name,barcode=samples.values()),
         expand("{sample}.consensus.fasta",sample=samples),
         expand("{run_name}-consensus.gisaid.fasta",run_name=run_name),
-        "lineage_report.csv",
+        expand("{run_name}_pangolin_lineage_report.csv",run_name=run_name),
         expand("{sample}.primertrimmed.rg.sorted.bam.depth_region",sample=samples),
         expand("{sample}.consensus.gisaid.fasta",sample=samples),
         expand("{sample}.consensus.gisaid.fasta.non_n_count",sample=samples),
         expand("{sample}.sorted.mapped.bam",sample=samples),
+        expand("{sample}.upload.done",sample=samples),
+        "fastq.done",
+        "reports.done",
+        "samples.done",
+        "pangolin.done",
+        "post.done"
+
         #"pipeline.done"
 
-rule guppylex:
+rule upload_fastq:
     input:
+        fastq_pass=run_folder+"/fastq_pass"
+    output:
+        "fastq.done"
+    params:
+        run_name=run_name,
+    shell:
+         "rclone copy {input.fastq_pass} edctp-ghana:RESULTS/{params.run_name}/RAW_FASTQ && touch fastq.done"
+
+rule upload_report:
+    input:
+        run_folder=run_folder
+    output:
+        "reports.done"
+    params:
+        run_name=run_name,
+    shell:
+         "rclone copy {input.run_folder}/report* edctp-ghana:RESULTS/{params.run_name}/REPORTS/ && touch reports.done"
+
+rule upload_samples:
+    output:
+        "samples.done"
+    params:
+        run_name=run_name,
+    shell:
+         "rclone copy samples.csv edctp-ghana:RESULTS/{params.run_name}/ && touch samples.done"
+
+
+rule guppylex:
     output:
         "{run_name}_{barcode}.fastq"
     params:
@@ -62,7 +97,7 @@ rule guppylex:
     conda:
         "envs/environment_artic.yml"
     shell:
-        "artic guppyplex --min-length 400 --skip-quality-check --max-length 700 --directory {params.fastq_pass}/{wildcards.barcode} --prefix {params.run_name}"
+        "artic guppyplex --min-length 400 --skip-quality-check --max-length 700 --directory {params.fastq_pass}/{wildcards.barcode} --prefix {params.run_name}  || touch {params.run_name}_{wildcards.barcode}.fastq"
 
 rule artic:
     input:
@@ -70,7 +105,8 @@ rule artic:
     output:
         "{sample}.consensus.fasta",
         "{sample}.primertrimmed.rg.sorted.bam",
-        "{sample}.sorted.bam"
+        "{sample}.sorted.bam",
+        "{sample}-barplot.png"
     params:
         summary = sequencing_summary,
         scheme_dir = scheme_dir,
@@ -134,20 +170,47 @@ rule merge_fasta:
 
 rule pangolin:
     input:
-        fasta= expand("{run_name}-consensus.gisaid.fasta",run_name=run_name)
+        fasta=expand("{run_name}-consensus.gisaid.fasta",run_name=run_name)
     output:
-        "lineage_report.csv"
+        run_name+"_pangolin_lineage_report.csv"
     conda:
         "envs/environment_pangolin.yml"
     shell:
-        "pangolin {input.fasta}"
+        "pangolin {input.fasta} --outfile {output}  || touch {output}"
+
+rule upload_pangolin:
+    input:
+        run_name+"_pangolin_lineage_report.csv"
+    output:
+        "pangolin.done"
+    params:
+        run_name = run_name
+    shell:
+        "rclone copy {input} edctp-ghana:RESULTS/{params.run_name}/ && touch pangolin.done"
 
 rule upload:
     input:
-        fasta=expand("{sample}.consensus.fasta",sample=samples.keys()),
-        bam=expand("{sample}.sorted.mapped.bam",sample=samples.keys()),
-        png=expand("{sample}-barplot.png",sample=samples.keys())
+        fasta = lambda wildcards: wildcards.sample+".consensus.fasta",
+        bam = lambda wildcards: wildcards.sample+".sorted.mapped.bam",
+        png = lambda wildcards: wildcards.sample+"-barplot.png"
+    output:
+        "{sample}.upload.done"
     params:
         run_name=run_name
     shell:
-         "rclone copy {input.bam} edctp-ghana:RESULTS/{params.run_name}/ && rclone copy {input.fasta} edctp-ghana:RESULTS/{params.run_name}/ &&  rclone copy {input.png} edctp-ghana:RESULTS/{params.run_name}/"
+         "rclone copy {input.bam} edctp-ghana:RESULTS/{params.run_name}/ && rclone copy {input.fasta} edctp-ghana:RESULTS/{params.run_name}/ &&  rclone copy {input.png} edctp-ghana:RESULTS/{params.run_name}/ && touch {wildcards.sample}.upload.done || touch {wildcards.sample}.upload.done "
+
+
+rule post_to_slack:
+    input:
+        "pangolin.done"
+    output:
+        "post.done"
+    params:
+        post_process = expand("{code_path}/bin/post_process.py",code_path=code_path),
+        run_name = run_name
+    shell:
+        "python {params.post_process} --run-id {params.run_name}"
+########################################################################################################
+## HERE LIES DANGER - WE WILL RSYNC TO A REMOTE VOLUME AND DELETE THE LOCAL COPY "--remove-source-files"
+########################################################################################################

@@ -16,11 +16,7 @@ Workflow steps:
 
 ### Upload Data to Shared Google Drive 
 
-Using `rclone` the last step in the pipeline is uploading files to google drive. We upload three files:
-
-* Non-human containing bam file (i.e. mapped only reads - bam file)
-* Consensus sequence (fasta)
-* The amplicon barplot (png file)
+Using `rclone` the last step in the pipeline is uploading files to google drive. We upload the raw fastq, the mapped bam, the fasta and some other files.
 
 We use the shared drive `EDCTP-Ghana` and upload results into the folder `RESULTS`
 

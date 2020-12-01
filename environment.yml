@@ -5,3 +5,5 @@ channels:
   - defaults
 dependencies:
   - snakemake-minimal=5.13
+  - slackclient=2.8
+  - tabulate
