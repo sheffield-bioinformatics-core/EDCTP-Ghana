@@ -210,7 +210,9 @@ rule post_to_slack:
         post_process = expand("{code_path}/bin/post_process.py",code_path=code_path),
         run_name = run_name
     shell:
-        "python {params.post_process} --run-id {params.run_name}"
+        "python {params.post_process} --run-id {params.run_name} && touch post.done"
+
+
 ########################################################################################################
 ## HERE LIES DANGER - WE WILL RSYNC TO A REMOTE VOLUME AND DELETE THE LOCAL COPY "--remove-source-files"
 ########################################################################################################
