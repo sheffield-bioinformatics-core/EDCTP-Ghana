@@ -99,7 +99,7 @@ if __name__ == '__main__':
         tmp.write(coverage)
 
     post_slack_message(
-        text="""*PIPELINE COMPLETE*
+        text="""*PIPELINE COMPLETE* (5000 miles away!)
 """ + args.run_id + """
 _""" + str(summary["total"]) + """ samples sequenced, """+ str(summary["hq"]) + """ above 0.95, """ + str(summary["lq"]) + """ above 0.5_""",
         title="PIPELINE COMPLETE "+ args.run_id,
