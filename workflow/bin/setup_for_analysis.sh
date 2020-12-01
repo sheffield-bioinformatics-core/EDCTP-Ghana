@@ -31,9 +31,11 @@ echo ${NANOPORE_NAME}
 ANALYSIS_FOLDER="/analysis/${NANOPORE_NAME}"
 echo ${ANALYSIS_FOLDER}
 
+
 # =======================================
 # if run is not complete exit
 # =======================================
+
 if compgen -G "${NANOPORE_FOLDER}/sequencing_summary*.txt" > /dev/null; then
   echo "sequencing_summary exists!"
 else
@@ -41,9 +43,11 @@ else
   exit 1
 fi
 
+
 # =======================================
 # check if the analysis has already been done
 # =======================================
+
 if [ -d $ANALYSIS_FOLDER ]
 then
   dialog --title "Analysis Directory Exists" --yesno "Analysis dirrectory exists for ${USER_RUN_NAME} - if you proceed analysis will be deleted. PROCEED?" 7 60
@@ -70,6 +74,7 @@ dialog --title "Enter Sample Names and Barcodes for ${USER_RUN_NAME}" --editbox 
 ret=$?
 option=$(<"${INPUT}")
 
+
 # =======================================
 # if samples file is empty exit
 # =======================================
@@ -79,16 +84,18 @@ then
   rm -rf $ANALYSIS_FOLDER
   exit 1
 fi
-# =======================================
 
-cd $ANALYSIS_FOLDER
 
 # =======================================
 # load conda and run snakemake
 # =======================================
 
+
+cd $ANALYSIS_FOLDER
+
 source /home/sarscov2/miniconda3/etc/profile.d/conda.sh
 
 conda activate sarscov2
 
-snakemake --config user_run_name=${USER_RUN_NAME} --snakefile ~/wc/EDCTP-Ghana/workflow/Snakefile --rerun-incomplete --use-conda --jobs 30 --latency-wait 120 --verbose --printshellcmds --stats snakemake_stats.json all --cluster 'qsub -V' --conda-cleanup-envs
+snakemake --config user_run_name=${USER_RUN_NAME} --snakefile ~/wc/EDCTP-Ghana/workflow/Snakefile --rerun-incomplete --use-conda --jobs 30 --latency-wait 120 --verbose --printshellcmds --stats snake
+make_stats.json all --cluster 'qsub -V' --conda-cleanup-envs
