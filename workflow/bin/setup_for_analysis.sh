@@ -97,5 +97,4 @@ source /home/sarscov2/miniconda3/etc/profile.d/conda.sh
 
 conda activate sarscov2
 
-snakemake --config user_run_name=${USER_RUN_NAME} --snakefile ~/wc/EDCTP-Ghana/workflow/Snakefile --rerun-incomplete --use-conda --jobs 30 --latency-wait 120 --verbose --printshellcmds --stats snake
-make_stats.json all --cluster 'qsub -V' --cleanup-conda
+snakemake --config user_run_name=${USER_RUN_NAME} --snakefile ~/wc/EDCTP-Ghana/workflow/Snakefile --rerun-incomplete --use-conda --jobs 30 --latency-wait 120 --verbose --printshellcmds --stats snakemake_stats.json all --cluster 'qsub -V' --cleanup-conda
