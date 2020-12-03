@@ -80,6 +80,8 @@ rule upload_report:
          "rclone copy {input.run_folder}/report* edctp-ghana:RESULTS/{params.run_name}/REPORTS/ && touch reports.done"
 
 rule upload_samples:
+    input:
+        "reports.done"
     output:
         "samples.done"
     params:
